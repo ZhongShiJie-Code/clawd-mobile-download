@@ -1,0 +1,510 @@
+package com.clawd.mobile.ui.sessions
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import android.util.Log
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import com.clawd.mobile.R
+import com.clawd.mobile.data.PrefsStore
+import com.clawd.mobile.data.Session
+import com.clawd.mobile.data.hasDisplayableUsage
+import com.clawd.mobile.service.WsConnectionService
+import com.clawd.mobile.ui.approval.ApprovalViewModel
+import com.clawd.mobile.ui.components.ClawdIcons
+import com.clawd.mobile.ui.components.connectionIssueText
+import com.clawd.mobile.ui.components.formatConnectionTime
+import com.clawd.mobile.ui.theme.*
+import com.clawd.mobile.ws.ConnectionTag
+import com.clawd.mobile.ws.ConnectionState
+import com.clawd.mobile.ws.SessionMerger
+import com.clawd.mobile.ws.StreamingClient
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SessionsScreen(
+    navController: NavController,
+    streamingClient: StreamingClient,
+    approvalViewModel: ApprovalViewModel,
+    prefsStore: PrefsStore,
+    sessionMerger: SessionMerger? = null
+) {
+    val connectionState by streamingClient.connectionState.collectAsState()
+    val sessionsMap by streamingClient.sessions.collectAsState()
+    val syncing by streamingClient.syncing.collectAsState()
+    val usageSnapshot by streamingClient.usageSnapshot.collectAsState()
+    val relayClient = WsConnectionService.getClientByTag(ConnectionTag.RELAY)
+    val relayState = relayClient?.connectionState?.collectAsState()?.value ?: ConnectionState.DISCONNECTED
+    val relayDiagnostic = relayClient?.connectionDiagnostic?.collectAsState()?.value
+    val relayUsage = relayClient?.usageSnapshot?.collectAsState()?.value
+    val relaySyncing = relayClient?.syncing?.collectAsState()?.value ?: false
+    // Use merged sessions if available for dual-connection mode
+    val mergedSessionsMap = sessionMerger?.mergedSessions?.collectAsState()?.value
+    val pendingRequests by approvalViewModel.pendingRequests.collectAsState()
+    val countdowns by approvalViewModel.countdowns.collectAsState()
+    val notificationRequestId by approvalViewModel.notificationRequestId.collectAsState()
+
+    // Use merged sessions if available (dual LAN+Relay), otherwise LAN-only
+    val sessions = remember(sessionsMap, mergedSessionsMap) {
+        val mapToUse = mergedSessionsMap?.flatMap { (id, taggedList) ->
+            taggedList.filter { it.session.isVisible }.map { tagged -> id to tagged.session }
+        }?.toMap() ?: sessionsMap
+        mapToUse.map { (id, data) -> Session(id, data) }
+            .filter { it.data.isVisible }
+            .sortedWith(compareByDescending<Session> { Session.statePriority(it.data.state) }
+                .thenByDescending { it.data.updatedAt ?: 0L })
+    }
+
+    val isConnected = connectionState == ConnectionState.CONNECTED ||
+        (relayState == ConnectionState.CONNECTED && relayDiagnostic?.peerConnected != false)
+    val useRelayUsage = relayUsage != null &&
+        (relayState == ConnectionState.CONNECTED || usageSnapshot == null)
+    val displayedUsage = if (useRelayUsage) relayUsage else usageSnapshot
+    val usageConnectionIsLive = if (useRelayUsage) {
+        relayState == ConnectionState.CONNECTED && relayDiagnostic?.peerConnected != false
+    } else connectionState == ConnectionState.CONNECTED
+    val activeSyncing = if (relayState == ConnectionState.CONNECTED) relaySyncing else syncing
+
+    LaunchedEffect(syncing, sessionsMap.size) {
+        Log.d("SessionsScreen", "syncing=$syncing sessions=${sessionsMap.size} connected=$isConnected")
+    }
+
+    val currentRequest = pendingRequests.firstOrNull()
+    var showSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pendingRequests.size) {
+        Log.d("SessionsScreen", "autoShowSheet pendingSize=${pendingRequests.size} currentRid=${pendingRequests.firstOrNull()?.requestId}")
+        showSheet = pendingRequests.isNotEmpty()
+    }
+
+    // Auto-show sheet when user taps a notification
+    LaunchedEffect(notificationRequestId, pendingRequests.size) {
+        val rid = notificationRequestId
+        Log.d("SessionsScreen", "notificationLaunchedEffect rid=$rid pendingSize=${pendingRequests.size}")
+        if (rid != null && pendingRequests.any { it.requestId == rid }) {
+            Log.d("SessionsScreen", "Exact match found, showing sheet")
+            showSheet = true
+            approvalViewModel.consumeNotificationRequestId()
+        } else if (rid != null && pendingRequests.isNotEmpty()) {
+            Log.d("SessionsScreen", "Fallback: showing first pending request")
+            showSheet = true
+            approvalViewModel.consumeNotificationRequestId()
+        }
+    }
+
+    // Bottom nav selected tab
+    var selectedTab by remember { mutableStateOf(0) }
+
+    // Devices placeholder dialog
+    var showDevicesPlaceholder by remember { mutableStateOf(false) }
+
+    // Reset tab to "会话" when screen resumes
+    LaunchedEffect(Unit) {
+        navController.currentBackStackEntryFlow.collect {
+            selectedTab = 0
+        }
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            // Fixed TopBar with connection status
+            FixedTopBar(
+                isConnected = isConnected,
+                connectionState = if (isConnected) ConnectionState.CONNECTED else connectionState,
+                onRetry = if (relayState == ConnectionState.CONNECTED && relayDiagnostic?.peerConnected == false) null
+                    else ({ streamingClient.reconnect(); relayClient?.reconnect() })
+            )
+
+            displayedUsage?.takeIf { it.hasDisplayableUsage() }?.let {
+                AccountUsagePanel(snapshot = it, isConnected = usageConnectionIsLive)
+            }
+
+            // Main content
+            if (activeSyncing && sessions.isEmpty()) {
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(32.dp),
+                            color = ClawdAccent,
+                            strokeWidth = 3.dp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(stringResource(R.string.status_syncing), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else if (!isConnected && sessions.isEmpty()) {
+                Box(modifier = Modifier.weight(1f)) {
+                    EmptyState(
+                        onScan = { navController.navigate("settings") },
+                        onManual = { navController.navigate("settings") }
+                    )
+                }
+            } else {
+                Column(modifier = Modifier.weight(1f)) {
+                    SectionLabel(title = stringResource(R.string.sessions_active_title), count = sessions.size)
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        items(sessions, key = { it.id }) { session ->
+                            SessionCard(
+                                session = session,
+                                prefsStore = prefsStore,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Bottom navigation
+            BottomNav(
+                selectedTab = selectedTab,
+                onTabSelected = { tab ->
+                    selectedTab = tab
+                    when (tab) {
+                        1 -> { showDevicesPlaceholder = true }
+                        2 -> navController.navigate("settings")
+                    }
+                }
+            )
+        }
+
+        // Devices bottom sheet
+        if (showDevicesPlaceholder) {
+            ModalBottomSheet(
+                onDismissRequest = {
+                    showDevicesPlaceholder = false
+                    selectedTab = 0
+                },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+            ) {
+                DevicesSheet(
+                    streamingClient = streamingClient,
+                    relayClient = relayClient,
+                    connectionState = connectionState,
+                    sessionCount = sessions.size,
+                    onClose = {
+                        showDevicesPlaceholder = false
+                        selectedTab = 0
+                    }
+                )
+            }
+        }
+
+        // Approval bottom sheet
+        if (showSheet && currentRequest != null) {
+            ModalBottomSheet(
+                onDismissRequest = {
+                    showSheet = false
+                    currentRequest.requestId?.let { approvalViewModel.dismissRequest(it) }
+                },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+            ) {
+                ApprovalSheet(
+                    request = currentRequest,
+                    sessionName = resolveSessionName(currentRequest.sessionId, sessionsMap, prefsStore),
+                    remainingSeconds = countdowns[currentRequest.requestId] ?: 0,
+                    onApprove = { requestId -> approvalViewModel.approve(requestId) },
+                    onDeny = { requestId -> approvalViewModel.deny(requestId) },
+                    onSuggestion = { requestId, index -> approvalViewModel.approveWithSuggestion(requestId, index) },
+                    onElicitation = { requestId, answers -> approvalViewModel.submitElicitation(requestId, answers) }
+                )
+            }
+        }
+    }
+}
+
+// ─── Fixed TopBar ─────────────────────────────────────────────────
+
+@Composable
+private fun FixedTopBar(isConnected: Boolean, connectionState: ConnectionState = if (isConnected) ConnectionState.CONNECTED else ConnectionState.DISCONNECTED, onRetry: (() -> Unit)? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Brand
+        Text(
+            text = "CLAWD",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = ClawdAccent,
+            letterSpacing = 0.6.sp
+        )
+        Text(
+            text = " Mobile",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Connection status dot + text + retry button
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(if (isConnected) ClawdGreenBright else MaterialTheme.colorScheme.onSurfaceVariant)
+        )
+        Text(
+            text = if (isConnected) stringResource(R.string.status_connected) else stringResource(R.string.status_not_connected),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isConnected) ClawdGreenBright else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp)
+        )
+        if (!isConnected && connectionState != ConnectionState.RECONNECTING && onRetry != null) {
+            IconButton(
+                onClick = onRetry,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    ClawdIcons.Refresh, null,
+                    modifier = Modifier.size(16.dp),
+                    tint = ClawdAccent
+                )
+            }
+        }
+    }
+}
+
+// ─── Section Label ────────────────────────────────────────────────
+
+@Composable
+private fun SectionLabel(title: String, count: Int) {
+    Text(
+        text = "$title · $count",
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = ClawdMuted,
+        letterSpacing = 0.5.sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 0.dp)
+            .padding(bottom = 8.dp)
+    )
+}
+
+// ─── Devices Sheet ────────────────────────────────────────────────
+
+@Composable
+private fun DevicesSheet(
+    streamingClient: StreamingClient,
+    relayClient: StreamingClient?,
+    connectionState: ConnectionState,
+    sessionCount: Int,
+    onClose: () -> Unit
+) {
+    val host = streamingClient.currentHost
+    val port = streamingClient.currentPort
+    val lanDiagnostic by streamingClient.connectionDiagnostic.collectAsState()
+    val relayState = relayClient?.connectionState?.collectAsState()?.value
+    val relayDiagnostic = relayClient?.connectionDiagnostic?.collectAsState()?.value
+    val overallState = if (connectionState == ConnectionState.CONNECTED ||
+        (relayState == ConnectionState.CONNECTED && relayDiagnostic?.peerConnected != false)) {
+        ConnectionState.CONNECTED
+    } else if (relayDiagnostic?.peerConnected == false) {
+        ConnectionState.DISCONNECTED
+    } else relayState ?: connectionState
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 32.dp)
+    ) {
+        // Header
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(ClawdIcons.DeviceDesktop, null, tint = ClawdAccent, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                stringResource(R.string.sessions_tab_devices),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Connection info card
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Status
+                DeviceInfoRow(
+                    label = stringResource(R.string.sessions_device_status),
+                    value = when (overallState) {
+                        ConnectionState.CONNECTED -> stringResource(R.string.status_connected)
+                        ConnectionState.CONNECTING -> stringResource(R.string.status_connecting)
+                        ConnectionState.RECONNECTING -> stringResource(R.string.status_reconnecting)
+                        ConnectionState.AUTH_FAILED -> stringResource(R.string.status_auth_failed)
+                        ConnectionState.PENDING_CERT_CONFIRMATION -> stringResource(R.string.sessions_waiting_auth)
+                        ConnectionState.DISCONNECTED -> stringResource(R.string.status_disconnected)
+                        ConnectionState.CIRCUIT_OPEN -> stringResource(R.string.status_circuit_open)
+                    },
+                    valueColor = when (overallState) {
+                        ConnectionState.CONNECTED -> ClawdGreenBright
+                        ConnectionState.AUTH_FAILED, ConnectionState.DISCONNECTED, ConnectionState.CIRCUIT_OPEN -> ClawdError
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+
+                if (host != null) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                    DeviceInfoRow(
+                        label = stringResource(R.string.sessions_device_address),
+                        value = if (port != null) "$host:$port" else host
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                DeviceInfoRow(
+                    label = stringResource(R.string.sessions_device_sessions),
+                    value = "$sessionCount"
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                DeviceInfoRow(
+                    label = stringResource(R.string.sessions_device_transport),
+                    value = "WebSocket"
+                )
+
+                ConnectionPathStatus(stringResource(R.string.connection_lan), connectionState, lanDiagnostic)
+                if (relayState != null && relayDiagnostic != null) {
+                    ConnectionPathStatus(stringResource(R.string.connection_relay), relayState, relayDiagnostic)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (overallState != ConnectionState.CONNECTED && relayDiagnostic?.peerConnected != false) {
+            OutlinedButton(
+                onClick = { streamingClient.reconnect(); relayClient?.reconnect() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.connection_retry))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Button(
+            onClick = onClose,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ClawdAccent,
+                contentColor = Color.White
+            ),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Text(stringResource(R.string.sessions_relay_ok), modifier = Modifier.padding(vertical = 4.dp))
+        }
+    }
+}
+
+@Composable
+private fun ConnectionPathStatus(
+    label: String,
+    state: ConnectionState,
+    diagnostic: com.clawd.mobile.ws.ConnectionDiagnostic,
+) {
+    val colors = MaterialTheme.colorScheme
+    Spacer(modifier = Modifier.height(12.dp))
+    Text(
+        "$label · ${if (state == ConnectionState.CONNECTED && diagnostic.peerConnected != false) stringResource(R.string.status_connected) else stringResource(R.string.status_not_connected)}",
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        color = colors.onSurface,
+    )
+    connectionIssueText(diagnostic.issue)?.takeIf { state != ConnectionState.CONNECTED || diagnostic.peerConnected == false }?.let {
+        Text(it, fontSize = 11.sp, color = colors.onSurfaceVariant)
+    }
+    Text(
+        "${stringResource(R.string.connection_last_success)} · " +
+            if (diagnostic.lastConnectedAt > 0L) formatConnectionTime(diagnostic.lastConnectedAt)
+            else stringResource(R.string.connection_never_connected),
+        fontSize = 11.sp,
+        color = colors.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun DeviceInfoRow(
+    label: String,
+    value: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = valueColor)
+    }
+}
+
+// ─── Empty State ──────────────────────────────────────────────────
+
+@Composable
+private fun EmptyState(onScan: () -> Unit, onManual: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                ClawdIcons.Paw, null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(stringResource(R.string.sessions_empty_title), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(stringResource(R.string.sessions_empty_subtitle), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = onScan,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ClawdAccent,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(stringResource(R.string.sessions_go_settings))
+            }
+        }
+    }
+}

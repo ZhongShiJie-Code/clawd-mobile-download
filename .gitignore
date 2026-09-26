@@ -1,0 +1,10 @@
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+*.jks
+*.keystore
+*.idsig
+release-artifacts/
+.DS_Store

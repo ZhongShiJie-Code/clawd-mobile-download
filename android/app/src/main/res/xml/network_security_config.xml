@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        Default: deny cleartext at the system level.
+        LAN ws:// connections are permitted at the OkHttp layer only when
+        ConnectionConfig.isLan == true (see HttpClientProvider).
+        Non-LAN connections use wss:// with system trust anchors.
+    -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,26 @@
+--- a/mobile-gateway.js
++++ b/mobile-gateway.js
+@@ -178,5 +178,5 @@ function readCodexQuotaSnapshot() {
+     plan: null,
+     windows,
+-    updatedAt: Number(source.codexQuota.updatedAt) || 0,
++    updatedAt: Number(source.codexQuota.lastSeenAt) || Number(source.codexQuota.updatedAt) || 0,
+   };
+ }
+@@ -236,7 +236,7 @@ function buildUsageSnapshot(codex, deepseek) {
+     timestamp: Date.now(),
+     usage: {
+       codex: { ...codex },
+-      deepseek: { ...deepseek, updatedAt: Date.now() },
++      deepseek: { ...deepseek },
+     },
+   };
+ }
+@@ -417,6 +417,6 @@ function startGateway() {
+     const candidate = requestedToken(req, url);
+     if (!tokenAccepted(candidate)) {
+       console.warn(`[mobile-gateway] reject auth path=${url.pathname} remote=${remote} token=${tokenFingerprint(candidate)}`);
+-      socket.destroy();
++      socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+       return;
+     }
