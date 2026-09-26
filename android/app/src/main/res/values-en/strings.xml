@@ -22,8 +22,8 @@
     <string name="status_disconnected">Disconnected</string>
     <string name="status_circuit_open">Connection failed — tap to retry</string>
     <string name="status_not_connected">Not connected</string>
-    <string name="connection_lan">Local network</string>
-    <string name="connection_relay">Remote connection</string>
+    <string name="connection_lan">Direct connection</string>
+    <string name="connection_relay">Relay</string>
     <string name="connection_last_success">Last connected</string>
     <string name="connection_never_connected">Never connected</string>
     <string name="connection_retry">Check again</string>
