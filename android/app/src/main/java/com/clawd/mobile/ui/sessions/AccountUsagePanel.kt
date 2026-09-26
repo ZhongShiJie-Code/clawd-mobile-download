@@ -106,7 +106,8 @@ internal fun AccountUsagePanel(snapshot: UsageSnapshot, isConnected: Boolean, mo
             } else {
                 Text("暂无桌面额度数据", fontSize = 12.sp, color = colors.onSurfaceVariant)
             }
-            UsageFreshness(snapshot, agy.updatedAt, isConnected, now)
+            // The gateway envelope time must not make an undated desktop quota look fresh.
+            UsageFreshness(snapshot.copy(timestamp = 0L), agy.updatedAt, isConnected, now)
         }
     }
 }
