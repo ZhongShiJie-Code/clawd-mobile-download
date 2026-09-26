@@ -28,7 +28,7 @@ internal fun FootprintsPanel(
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("足迹", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                Text("足迹", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
                 TextButton(onClick = onRefresh, enabled = connected && !loading) { Text(if (loading) "读取中" else "刷新") }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -52,7 +52,7 @@ internal fun FootprintsPanel(
             val rows = snapshot.days.flatMap { it.rows }
             item {
                 FootprintCard {
-                    Text("会话活动", fontWeight = FontWeight.SemiBold)
+                    Text("会话活动", fontWeight = FontWeight.SemiBold, color = colors.onSurface)
                     Spacer(Modifier.height(10.dp))
                     val totals = listOf(
                         "开始的会话" to rows.metricTotal(sessionMetric = true) { it.sessionsStarted },
@@ -65,7 +65,7 @@ internal fun FootprintsPanel(
                             pair.forEach { (label, value) ->
                                 Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                                     Text(label, fontSize = 12.sp, color = colors.onSurfaceVariant)
-                                    Text(value, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(value, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
                                 }
                             }
                         }
@@ -76,7 +76,7 @@ internal fun FootprintsPanel(
             }
             item {
                 FootprintCard {
-                    Text("活动时段", fontWeight = FontWeight.SemiBold)
+                    Text("活动时段", fontWeight = FontWeight.SemiBold, color = colors.onSurface)
                     Spacer(Modifier.height(14.dp))
                     if (period == "today") {
                         val hourly = (0..23).map { hour -> rows.sumOf { it.hours.getOrNull(hour) ?: 0L } }
@@ -123,7 +123,7 @@ internal fun FootprintsPanel(
             rows.groupBy { it.agentId }.forEach { (agent, agentRows) ->
                 item(key = agent) {
                     FootprintCard {
-                        Text(agent, fontWeight = FontWeight.SemiBold)
+                        Text(agent, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
                         Text("回合 ${agentRows.metricTotal { it.turnsCompleted }} · 工具 ${agentRows.metricTotal { it.toolCalls }} · 活动 ${agentRows.metricTotal { it.activityEvents }}",
                             fontSize = 12.sp, color = colors.onSurfaceVariant)
                     }
