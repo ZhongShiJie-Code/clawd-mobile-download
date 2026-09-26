@@ -57,6 +57,8 @@ abstract class AbstractStreamingClient(
     protected var reconnectJob: Job? = null
     protected var watchdogJob: Job? = null
     protected var reconnectAttempts = 0
+    @Volatile
+    private var networkAvailable = true
     protected val maxReconnectAttempts = 10
     /** Delay before auto-recovering from circuit-open state (60 seconds). */
     private val CIRCUIT_OPEN_RETRY_MS = 60_000L
@@ -71,10 +73,15 @@ abstract class AbstractStreamingClient(
     private val _sessionsMap = java.util.concurrent.ConcurrentHashMap<String, SessionData>()
     private val _sessions = MutableStateFlow<Map<String, SessionData>>(emptyMap())
     override val sessions: StateFlow<Map<String, SessionData>> = _sessions
+    private val sessionRefreshGate = SessionRefreshGate(scope) { _sessions.value = _sessionsMap.toMap() }
 
     /** Emit current [_sessionsMap] snapshot to the StateFlow. */
     protected fun emitSessions() {
-        _sessions.value = _sessionsMap.toMap()
+        sessionRefreshGate.immediate()
+    }
+
+    private fun emitSessionsDeferred() {
+        sessionRefreshGate.deferred()
     }
 
     private val _permissionRequests = MutableSharedFlow<PermissionRequestData>(extraBufferCapacity = 16)
@@ -101,6 +108,7 @@ abstract class AbstractStreamingClient(
             tag = tag,
             sessionsMap = _sessionsMap,
             emitSessions = { emitSessions() },
+            emitToolOutput = { emitSessionsDeferred() },
             displayState = _displayState,
             syncing = _syncing,
             usageSnapshot = _usageSnapshot,
@@ -289,6 +297,7 @@ abstract class AbstractStreamingClient(
     fun reconnectOnNetworkChange() {
         val state = _connectionState.value
         if (state == ConnectionState.DISCONNECTED) return
+        if (state == ConnectionState.AUTH_FAILED || state == ConnectionState.PENDING_CERT_CONFIRMATION) return
         if (state == ConnectionState.CONNECTED) return
         // ConnectivityManager can report the same validated network while
         // the initial WebSocket handshake is still in progress. Replacing
@@ -306,9 +315,37 @@ abstract class AbstractStreamingClient(
         scope.launch { doConnect() }
     }
 
+    /** Suspend retry timers offline; preserve sessions and manual disconnect/auth decisions. */
+    fun setNetworkAvailable(available: Boolean) {
+        if (networkAvailable == available) return
+        networkAvailable = available
+        if (available) {
+            reconnectOnNetworkChange()
+        } else {
+            reconnectJob?.cancel()
+            watchdogJob?.cancel()
+            val state = _connectionState.value
+            if (state != ConnectionState.DISCONNECTED && state != ConnectionState.AUTH_FAILED &&
+                state != ConnectionState.PENDING_CERT_CONFIRMATION) {
+                closeTransport()
+                _connectionState.value = ConnectionState.RECONNECTING
+                _displayState.value = "idle"
+                _connectionDiagnostic.value = _connectionDiagnostic.value.copy(issue = ConnectionIssue.NETWORK)
+            }
+        }
+    }
+
+    protected fun canOpenTransport(): Boolean {
+        if (networkAvailable) return true
+        _connectionState.value = ConnectionState.RECONNECTING
+        _connectionDiagnostic.value = _connectionDiagnostic.value.copy(issue = ConnectionIssue.NETWORK)
+        return false
+    }
+
     /** Schedule a reconnect with exponential backoff. Trips circuit after [maxReconnectAttempts]. */
     protected fun scheduleReconnect() {
         if (_connectionState.value == ConnectionState.DISCONNECTED) return
+        if (!networkAvailable) return
         if (reconnectJob?.isActive == true) return
         reconnectAttempts++
         ConnectionLog.d(tag, "scheduleReconnect attempts=$reconnectAttempts delay=$reconnectDelay")

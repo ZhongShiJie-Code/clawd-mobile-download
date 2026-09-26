@@ -40,7 +40,7 @@ if (signingSha256 !== expectedCertificate) throw new Error('APK signing certific
 
 const output = join(root, 'release-artifacts');
 mkdirSync(output, { recursive: true });
-const apkName = `Clawd-Mobile-${versionName}-diagnostics-debug.apk`;
+const apkName = `Clawd-Mobile-${versionName}-debug.apk`;
 copyFileSync(apk, join(output, apkName));
 const sha256 = createHash('sha256').update(readFileSync(apk)).digest('hex');
 const release = {

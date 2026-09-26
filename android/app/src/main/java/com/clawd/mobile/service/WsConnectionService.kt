@@ -8,7 +8,6 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
@@ -145,8 +144,6 @@ class WsConnectionService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private var lastNetworkReconnectMs = 0L
-    private val networkDebounceMs = 3000L // Debounce network callbacks to avoid concurrent connections
 
     override fun onCreate() {
         super.onCreate()
@@ -347,24 +344,25 @@ class WsConnectionService : Service() {
         // Register network change callback for instant WiFi switch detection
         if (networkCallback == null) {
             val cm = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            fun updateAvailability(available: Boolean) {
+                (streamingClient as? WsClient)?.setNetworkAvailable(available)
+                (relayClient as? WsClient)?.setNetworkAvailable(available)
+            }
+            updateAvailability(cm.activeNetwork != null)
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
-                    val now = android.os.SystemClock.elapsedRealtime()
-                    if (now - lastNetworkReconnectMs < networkDebounceMs) {
-                        android.util.Log.d("WsConnectionService", "Network available — debounced (${now - lastNetworkReconnectMs}ms ago)")
-                        return
-                    }
-                    lastNetworkReconnectMs = now
-                    android.util.Log.d("WsConnectionService", "Network available — triggering reconnect")
-                    (streamingClient as? com.clawd.mobile.ws.WsClient)?.reconnectOnNetworkChange()
-                    (relayClient as? com.clawd.mobile.ws.WsClient)?.reconnectOnNetworkChange()
+                    updateAvailability(true)
+                    (streamingClient as? WsClient)?.reconnectOnNetworkChange()
+                    (relayClient as? WsClient)?.reconnectOnNetworkChange()
+                }
+
+                override fun onLost(network: Network) {
+                    val active = cm.activeNetwork
+                    updateAvailability(active != null && active != network)
                 }
             }
             networkCallback = callback
-            val request = NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build()
-            cm.registerNetworkCallback(request, callback)
+            cm.registerDefaultNetworkCallback(callback)
         }
     }
 

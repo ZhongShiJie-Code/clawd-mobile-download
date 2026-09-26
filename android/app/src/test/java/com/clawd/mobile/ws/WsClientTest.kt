@@ -132,4 +132,29 @@ class WsClientTest {
         client.disconnect()
         assertEquals(ConnectionState.DISCONNECTED, client.connectionState.value)
     }
+
+    @Test fun `offline connect preserves config without opening a transport`() = runTest {
+        client.setNetworkAvailable(false)
+        client.connect(ConnectionConfig("localhost", 1, "test-token-1234567890ab"))
+        assertEquals(ConnectionState.RECONNECTING, client.connectionState.value)
+        assertEquals(ConnectionIssue.NETWORK, client.connectionDiagnostic.value.issue)
+        assertEquals("localhost", client.currentHost)
+    }
+
+    @Test fun `network recovery never overrides manual disconnect`() = runTest {
+        client.setNetworkAvailable(false)
+        client.disconnect()
+        client.setNetworkAvailable(true)
+        assertEquals(ConnectionState.DISCONNECTED, client.connectionState.value)
+    }
+
+    @Test fun `network recovery never retries rejected auth or pending certificate`() = runTest {
+        for (state in listOf(ConnectionState.AUTH_FAILED, ConnectionState.PENDING_CERT_CONFIRMATION)) {
+            client.setConnectionState(state)
+            client.setNetworkAvailable(false)
+            client.setNetworkAvailable(true)
+            client.reconnectOnNetworkChange()
+            assertEquals(state, client.connectionState.value)
+        }
+    }
 }

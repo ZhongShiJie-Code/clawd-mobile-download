@@ -37,6 +37,7 @@ class WsClient(
 
     override fun doConnect() {
         val cfg = config ?: return
+        if (!canOpenTransport()) return
         doConnectPreamble()
         closeTransport()
         val generation = transportGeneration.get()

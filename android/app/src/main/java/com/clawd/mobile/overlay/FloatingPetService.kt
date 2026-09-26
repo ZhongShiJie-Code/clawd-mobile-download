@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import androidx.core.content.ContextCompat
 import android.graphics.PixelFormat
 import android.os.IBinder
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -179,6 +180,7 @@ class FloatingPetService : Service() {
         when (command) {
             is PetStateManager.StateCommand.StateChanged -> {
                 val state = command.state
+                petView?.setIdleAnimation(state == PetState.Idle || state == PetState.Sleeping)
                 val sessionCount = command.sessionCount
                 // Use server-resolved SVG when available (displayHintMap match),
                 // otherwise fall back to local tier/fallback logic.
@@ -198,12 +200,14 @@ class FloatingPetService : Service() {
                 }
             }
             is PetStateManager.StateCommand.SvgLoad -> {
+                petView?.setIdleAnimation(false)
                 val path = command.assetPath
                 if (path != null) {
                     petView?.let { SvgLoader.loadSvg(it, path, loop = true) }
                 }
             }
             is PetStateManager.StateCommand.ReactionSvg -> {
+                petView?.setIdleAnimation(false)
                 val path = command.assetPath
                 if (path != null) {
                     petView?.let { SvgLoader.loadSvg(it, path, loop = false) }
@@ -360,6 +364,7 @@ class FloatingPetService : Service() {
         petView!!.clickThroughEnabled = prefsStore.isClickThroughEnabled()
 
         windowManager?.addView(petView!!, layoutParams)
+        petView?.setScreenInteractive((getSystemService(POWER_SERVICE) as PowerManager).isInteractive)
         petView!!.post { petView!!.cacheHitTestBitmap() }
         Log.d(TAG, "Pet view added at x=$savedX, y=$savedY, size=$sizePx")
     }
@@ -381,6 +386,8 @@ class FloatingPetService : Service() {
         broadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 when (intent.action) {
+                    Intent.ACTION_SCREEN_OFF -> petView?.setScreenInteractive(false)
+                    Intent.ACTION_SCREEN_ON -> petView?.setScreenInteractive(true)
                     ACTION_PET_SIZE -> {
                         sizeDp = intent.getIntExtra(EXTRA_SIZE_DP, DEFAULT_SIZE_DP)
                         updateSize()
@@ -403,6 +410,8 @@ class FloatingPetService : Service() {
             }
         }
         val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
             addAction(ACTION_PET_SIZE)
             addAction(ACTION_PET_CHARACTER)
             addAction(ACTION_PET_RECENTER)

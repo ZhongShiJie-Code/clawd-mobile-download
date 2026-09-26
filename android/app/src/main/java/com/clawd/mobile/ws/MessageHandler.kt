@@ -34,6 +34,7 @@ class MessageHandler(
     private val onPeerConnected: ((String) -> Unit)? = null,
     private val onPeerDisconnected: ((String) -> Unit)? = null,
     private val onDesktopMessage: (() -> Unit)? = null,
+    private val emitToolOutput: () -> Unit = emitSessions,
 ) {
     /**
      * Parse and dispatch a raw message string.
@@ -64,8 +65,10 @@ class MessageHandler(
                 parsed.displayState?.let { displayState.value = it }
                 Log.d(tag, "snapshot (${parsed.sessions.size} sessions, displayState=${displayState.value}) → syncing=false")
                 syncing.value = false
-                sessionsMap.clear()
-                sessionsMap.putAll(parsed.sessions)
+                if (sessionsMap != parsed.sessions) {
+                    sessionsMap.clear()
+                    sessionsMap.putAll(parsed.sessions)
+                }
                 emitSessions()
             }
 
@@ -94,7 +97,7 @@ class MessageHandler(
                         at = parsed.timestamp,
                     )
                 )
-                emitSessions()
+                emitToolOutput()
             }
 
             is ParsedMessage.SessionDeleted -> {

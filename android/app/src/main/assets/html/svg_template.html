@@ -12,6 +12,7 @@
 <body>
   <div class="container"></div>
   <script>
+    {{POWER_SCRIPT}}
     function sanitizeSvg(raw) {
       var s = raw;
       s = s.replace(/<script[\s\S]*?<\/script>/gi, '');
@@ -44,6 +45,7 @@
         }
       } catch(e) {}
       if (typeof window.onSvgLoaded === 'function') window.onSvgLoaded();
+      if (typeof window.refreshPetPower === 'function') window.refreshPetPower();
     }
     // Hot-swap API: fetch, sanitize, replace SVG in-place (no page reload)
     window.updatePetSvg = function(url) {

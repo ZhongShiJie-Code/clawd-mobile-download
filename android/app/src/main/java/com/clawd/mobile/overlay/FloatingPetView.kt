@@ -203,6 +203,7 @@ class FloatingPetView @JvmOverloads constructor(
 
                 // Mark page as loaded — all subsequent SVG changes use hot-swap JS
                 isPageLoaded = true
+                applyAnimationPolicy()
 
                 // Initial dimension read after first page load.
                 // The template's XHR sets _svgWidth/_svgHeight; poll briefly for it.
@@ -234,7 +235,6 @@ class FloatingPetView @JvmOverloads constructor(
      */
     fun loadSvg(assetPath: String) {
         if (assetPath == currentAssetPath) return
-        currentAssetPath = assetPath
         SvgLoader.loadSvg(this, assetPath, loop = true)
     }
 
@@ -242,6 +242,7 @@ class FloatingPetView @JvmOverloads constructor(
      * Clear the current SVG content.
      */
     fun clearSvg() {
+        pendingAnimation = null
         currentAssetPath = null
         isPageLoaded = false
         hitTestBitmap?.recycle()
@@ -253,6 +254,40 @@ class FloatingPetView @JvmOverloads constructor(
         hitTestBitmap?.recycle()
         hitTestBitmap = null
         super.onDetachedFromWindow()
+    }
+
+    private var screenInteractive = true
+    private var pendingAnimation: Pair<String, Boolean>? = null
+    private var idleAnimation = false
+
+    internal fun prepareAnimation(assetPath: String, loop: Boolean): Boolean {
+        val duplicateLoop = loop && pendingAnimation == (assetPath to true) && isPageLoaded
+        pendingAnimation = assetPath to loop
+        currentAssetPath = assetPath
+        return screenInteractive && !duplicateLoop
+    }
+
+    fun setIdleAnimation(idle: Boolean) {
+        if (idleAnimation == idle) return
+        idleAnimation = idle
+        if (isPageLoaded) applyAnimationPolicy()
+    }
+
+    private fun applyAnimationPolicy() {
+        evaluateJavascript("window.setPetIdle && window.setPetIdle($idleAnimation);", null)
+    }
+
+    fun setScreenInteractive(interactive: Boolean) {
+        if (screenInteractive == interactive) return
+        screenInteractive = interactive
+        if (!interactive) {
+            // Unload only this renderer, never pause all WebViews or the connection service.
+            SvgLoader.clearSvg(this)
+            onPause()
+        } else {
+            onResume()
+            pendingAnimation?.let { (path, loop) -> SvgLoader.loadSvg(this, path, loop) }
+        }
     }
 
     // ======================================================================

@@ -356,6 +356,7 @@ object SvgLoader {
         pollGeneration++
 
         val view = webView as? FloatingPetView
+        if (view != null && !view.prepareAnimation(assetPath, loop)) return
         val url = "$SVG_BASE/${assetPath.removePrefix("svg/")}"
         val isApng = assetPath.endsWith(".apng")
 
@@ -367,6 +368,7 @@ object SvgLoader {
             val loopStyle = if (loop) "" else "animation-iteration-count: 1;"
             val templateName = if (isApng) "apng_template.html" else "svg_template.html"
             val html = loadTemplate(webView.context, templateName)
+                .replace("{{POWER_SCRIPT}}", loadTemplate(webView.context, "pet_power.js"))
                 .replace("{{URL}}", url)
                 .replace("{{LOOP_STYLE}}", loopStyle)
                 .replace("{{ANIM_END_SCRIPT}}", "")

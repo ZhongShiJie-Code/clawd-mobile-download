@@ -334,6 +334,29 @@ class MessageHandlerTest {
     // ── 13. ToolOutput → updates lastOutput ────────────────────────────
 
     @Test
+    fun `only tool output uses deferred refresh while completion remains immediate`() {
+        val deferred = mockk<() -> Unit>(relaxed = true)
+        val batchingHandler = MessageHandler(
+            tag = "Test", sessionsMap = sessionsMap, emitSessions = emitSessions,
+            displayState = displayState, syncing = syncing, permissionRequests = permissionRequests,
+            reactions = reactions, scope = scope, messageParser = messageParser,
+            sendPong = sendPong, emitToolOutput = deferred,
+        )
+        sessionsMap["s1"] = makeSession(sessionId = "s1")
+        every { messageParser.parse(any()) } returns ParsedMessage.ToolOutput("s1", "Read", "latest", 1L)
+        batchingHandler.handleMessage("output", false)
+        verify(exactly = 1) { deferred() }
+        verify(exactly = 0) { emitSessions() }
+        every { messageParser.parse(any()) } returns ParsedMessage.State(
+            "s1", makeSession(sessionId = "s1", state = "idle"), "notification", 2L,
+        )
+        batchingHandler.handleMessage("done", false)
+        assertEquals("notification", displayState.value)
+        verify(exactly = 1) { emitSessions() }
+        verify(exactly = 1) { deferred() }
+    }
+
+    @Test
     fun `ToolOutput updates existing session lastOutput`() {
         sessionsMap["s1"] = makeSession(sessionId = "s1")
         every { messageParser.parse(any()) } returns ParsedMessage.ToolOutput(
