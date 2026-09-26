@@ -3,9 +3,9 @@ name: Android Quality Gate
 on:
   push:
     branches: [main]
-    paths: ['android/**', 'scripts/**', '.github/workflows/android.yml']
+    paths: ['android/**', 'gateway/**', 'scripts/**', '.github/workflows/android.yml']
   pull_request:
-    paths: ['android/**', 'scripts/**', '.github/workflows/android.yml']
+    paths: ['android/**', 'gateway/**', 'scripts/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
 permissions:

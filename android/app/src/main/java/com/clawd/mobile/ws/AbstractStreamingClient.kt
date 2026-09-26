@@ -92,6 +92,8 @@ abstract class AbstractStreamingClient(
 
     private val _usageSnapshot = MutableStateFlow<UsageSnapshot?>(null)
     override val usageSnapshot: StateFlow<UsageSnapshot?> = _usageSnapshot
+    private val _footprints = MutableStateFlow<Map<String, FootprintsSnapshot>>(emptyMap())
+    override val footprints: StateFlow<Map<String, FootprintsSnapshot>> = _footprints
 
     private val _displayState = MutableStateFlow("idle")
     override val displayState: StateFlow<String> = _displayState
@@ -112,6 +114,7 @@ abstract class AbstractStreamingClient(
             displayState = _displayState,
             syncing = _syncing,
             usageSnapshot = _usageSnapshot,
+            footprints = _footprints,
             permissionRequests = _permissionRequests,
             reactions = _reactions,
             scope = scope,
@@ -148,6 +151,10 @@ abstract class AbstractStreamingClient(
     // ── Shared concrete implementations ──────────────────────────────────
 
     override fun connect(config: ConnectionConfig) {
+        if (this.config != null && this.config != config) {
+            _footprints.value = emptyMap()
+            _usageSnapshot.value = null
+        }
         android.util.Log.d(tag, "connect(${config.host}:${config.port})")
         ConnectionLog.d(tag, "connect(${config.host}:${config.port}) state=${_connectionState.value}")
         this.config = config

@@ -29,6 +29,12 @@ class MessageParser {
             "snapshot" -> parseSnapshot(obj, timestamp)
             "state" -> parseState(obj, timestamp)
             "usage_snapshot" -> parseUsageSnapshot(obj, timestamp)
+            "footprints_snapshot" -> try {
+                val snapshot = json.decodeFromJsonElement<FootprintsSnapshot>(obj)
+                if (snapshot.period !in listOf("today", "week", "month", "year") || snapshot.days.size > 366) {
+                    ParsedMessage.Unknown(type, timestamp)
+                } else ParsedMessage.Footprints(snapshot, timestamp)
+            } catch (_: Exception) { ParsedMessage.Unknown(type, timestamp) }
             "tool_output" -> parseToolOutput(obj, timestamp)
             "session_deleted" -> parseSessionDeleted(obj, timestamp)
             "permission_request" -> parsePermissionRequest(obj, timestamp)

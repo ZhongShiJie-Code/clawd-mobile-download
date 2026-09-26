@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import android.util.Log
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.clawd.mobile.R
 import com.clawd.mobile.data.PrefsStore
 import com.clawd.mobile.data.Session
@@ -107,6 +110,45 @@ fun SessionsScreen(
 
     // Bottom nav selected tab
     var selectedTab by remember { mutableStateOf(0) }
+    var footprintPeriod by remember { mutableStateOf("today") }
+    var footprintRefresh by remember { mutableIntStateOf(0) }
+    var footprintLoading by remember { mutableStateOf(false) }
+    var footprintError by remember { mutableStateOf<String?>(null) }
+    var footprintBaseline by remember { mutableStateOf<Long?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var screenStarted by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            screenStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val directFootprints by streamingClient.footprints.collectAsState()
+    val relayFootprints = relayClient?.footprints?.collectAsState()?.value
+    val footprintClient = if (connectionState == ConnectionState.CONNECTED) streamingClient else relayClient ?: streamingClient
+    val footprintSnapshot = (if (footprintClient === streamingClient) directFootprints else relayFootprints)?.get(footprintPeriod)
+
+    LaunchedEffect(selectedTab, footprintPeriod, footprintRefresh, connectionState, relayState, screenStarted) {
+        if (selectedTab != 1) return@LaunchedEffect
+        footprintError = null
+        footprintLoading = false
+        if (!isConnected || !screenStarted) return@LaunchedEffect
+        val previous = footprintClient.footprints.value[footprintPeriod]?.timestamp
+        footprintBaseline = previous
+        footprintLoading = footprintClient.sendMessage("""{"type":"footprints_query","period":"$footprintPeriod"}""")
+        if (!footprintLoading) { footprintError = "发送失败，请重试"; return@LaunchedEffect }
+        kotlinx.coroutines.delay(8_000L)
+        footprintLoading = false
+        if (footprintClient.footprints.value[footprintPeriod]?.timestamp == previous) {
+            footprintError = "未收到足迹数据，请检查网关是否已更新"
+        }
+    }
+    LaunchedEffect(footprintSnapshot?.timestamp) {
+        if (footprintSnapshot != null && footprintSnapshot.timestamp != footprintBaseline) {
+            footprintLoading = false; footprintError = null
+        }
+    }
 
     // Devices placeholder dialog
     var showDevicesPlaceholder by remember { mutableStateOf(false) }
@@ -134,12 +176,20 @@ fun SessionsScreen(
                     else ({ streamingClient.reconnect(); relayClient?.reconnect() })
             )
 
-            displayedUsage?.takeIf { it.hasDisplayableUsage() }?.let {
+            displayedUsage?.takeIf { selectedTab == 0 && it.hasDisplayableUsage() }?.let {
                 AccountUsagePanel(snapshot = it, isConnected = usageConnectionIsLive)
             }
 
             // Main content
-            if (activeSyncing && sessions.isEmpty()) {
+            if (selectedTab == 1) {
+                FootprintsPanel(
+                    snapshot = footprintSnapshot, period = footprintPeriod,
+                    loading = footprintLoading, error = footprintError, connected = isConnected,
+                    usage = displayedUsage, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    onPeriod = { footprintPeriod = it }, onRefresh = { footprintRefresh++ },
+                    onConnection = { showDevicesPlaceholder = true },
+                )
+            } else if (activeSyncing && sessions.isEmpty()) {
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(
@@ -183,7 +233,6 @@ fun SessionsScreen(
                 onTabSelected = { tab ->
                     selectedTab = tab
                     when (tab) {
-                        1 -> { showDevicesPlaceholder = true }
                         2 -> navController.navigate("settings")
                     }
                 }
@@ -195,7 +244,6 @@ fun SessionsScreen(
             ModalBottomSheet(
                 onDismissRequest = {
                     showDevicesPlaceholder = false
-                    selectedTab = 0
                 },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -208,7 +256,6 @@ fun SessionsScreen(
                     sessionCount = sessions.size,
                     onClose = {
                         showDevicesPlaceholder = false
-                        selectedTab = 0
                     }
                 )
             }

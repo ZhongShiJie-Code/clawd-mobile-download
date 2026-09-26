@@ -32,6 +32,11 @@ sealed class ParsedMessage {
         override val timestamp: Long,
     ) : ParsedMessage()
 
+    data class Footprints(
+        val snapshot: FootprintsSnapshot,
+        override val timestamp: Long,
+    ) : ParsedMessage()
+
     data class ToolOutput(
         val sessionId: String,
         val toolName: String,

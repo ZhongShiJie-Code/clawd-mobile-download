@@ -5,6 +5,7 @@ import com.clawd.mobile.data.LastOutput
 import com.clawd.mobile.data.PermissionRequestData
 import com.clawd.mobile.data.SessionData
 import com.clawd.mobile.data.UsageSnapshot
+import com.clawd.mobile.data.FootprintsSnapshot
 import com.clawd.mobile.util.SafeExecutor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -26,6 +27,7 @@ class MessageHandler(
     private val displayState: MutableStateFlow<String>,
     private val syncing: MutableStateFlow<Boolean>,
     private val usageSnapshot: MutableStateFlow<UsageSnapshot?> = MutableStateFlow(null),
+    private val footprints: MutableStateFlow<Map<String, FootprintsSnapshot>> = MutableStateFlow(emptyMap()),
     private val permissionRequests: MutableSharedFlow<PermissionRequestData>,
     private val reactions: MutableSharedFlow<String>,
     private val scope: CoroutineScope,
@@ -80,6 +82,10 @@ class MessageHandler(
                 else sessionsMap.remove(parsed.sessionId)
                 emitSessions()
                 Log.d(tag, "state sid=${parsed.sessionId} state=${data.state} displayState=${data.displayState} globalDisplayState=${displayState.value} badge=${data.badge} chip=${data.chipText}/${data.chipColor} dot=${data.dotColor} visible=${data.isVisible}")
+            }
+
+            is ParsedMessage.Footprints -> {
+                footprints.value = footprints.value + (parsed.snapshot.period to parsed.snapshot)
             }
 
             is ParsedMessage.Usage -> {

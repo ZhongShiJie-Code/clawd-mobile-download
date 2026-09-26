@@ -88,6 +88,25 @@ internal fun AccountUsagePanel(snapshot: UsageSnapshot, isConnected: Boolean, mo
                     UsageFreshness(snapshot, deepseek.updatedAt, isConnected, now)
                 }
             }
+            val agy = snapshot.usage.antigravity
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("AGY / Antigravity", fontSize = 12.sp, color = colors.onSurfaceVariant)
+            if (agy.status == "ok" && agy.windows.isNotEmpty()) {
+                agy.windows.chunked(2).forEach { pair ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        pair.forEach { window ->
+                            Text(
+                                "${window.label} · ${stringResource(R.string.usage_remaining, window.remainingPercent)}",
+                                modifier = Modifier.weight(1f), fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium, color = colors.onSurface,
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text("暂无桌面额度数据", fontSize = 12.sp, color = colors.onSurfaceVariant)
+            }
+            UsageFreshness(snapshot, agy.updatedAt, isConnected, now)
         }
     }
 }

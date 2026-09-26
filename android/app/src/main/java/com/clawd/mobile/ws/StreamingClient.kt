@@ -12,6 +12,7 @@ interface StreamingClient {
     val displayState: StateFlow<String>
     val syncing: StateFlow<Boolean>
     val usageSnapshot: StateFlow<UsageSnapshot?>
+    val footprints: StateFlow<Map<String, FootprintsSnapshot>>
     val permissionRequests: SharedFlow<PermissionRequestData>
     val certFingerprintPending: SharedFlow<CertFingerprintInfo>
     val reactions: SharedFlow<String>

@@ -1,0 +1,73 @@
+--- mobile-gateway.js.before-footprints-20260926	2026-09-26 16:12:34
++++ mobile-gateway.js	2026-09-26 16:12:36
+@@ -6,6 +6,7 @@
+ const os = require("os");
+ const path = require("path");
+ const WebSocket = require("ws");
++const { readAntigravityQuota, readFootprints } = require("./desktop-footprints.cjs");
+ 
+ const LOCAL_PORT = Number(process.env.CLAWD_LOCAL_PORT || 23334);
+ const GATEWAY_PORT = Number(process.env.CLAWD_GATEWAY_PORT || 23335);
+@@ -229,7 +230,7 @@
+   }
+ }
+ 
+-function buildUsageSnapshot(codex, deepseek) {
++function buildUsageSnapshot(codex, deepseek, antigravity = readAntigravityQuota()) {
+   return {
+     version: "v2",
+     type: "usage_snapshot",
+@@ -237,6 +238,7 @@
+     usage: {
+       codex: { ...codex },
+       deepseek: { ...deepseek },
++      antigravity: { ...antigravity },
+     },
+   };
+ }
+@@ -362,11 +364,12 @@
+   const phones = new Set();
+   let connectionId = 0;
+   let codexUsage = readCodexQuotaSnapshot();
++  let antigravityUsage = readAntigravityQuota();
+   let deepseekUsage = { status: "unavailable", error: "Loading", currency: "CNY", balance: null, entries: [], updatedAt: 0 };
+   let usageRefreshInFlight = null;
+ 
+   function currentUsageMessage() {
+-    return JSON.stringify(buildUsageSnapshot(codexUsage, deepseekUsage));
++    return JSON.stringify(buildUsageSnapshot(codexUsage, deepseekUsage, antigravityUsage));
+   }
+ 
+   function broadcastUsage() {
+@@ -381,6 +384,7 @@
+     if (usageRefreshInFlight) return usageRefreshInFlight;
+     usageRefreshInFlight = (async () => {
+       const nextCodex = readCodexQuotaSnapshot();
++      antigravityUsage = readAntigravityQuota();
+       const nextDeepseek = await fetchDeepseekBalance();
+       codexUsage = nextCodex;
+       deepseekUsage = { ...nextDeepseek, updatedAt: Date.now() };
+@@ -450,7 +454,23 @@
+       try { if ([WebSocket.OPEN, WebSocket.CONNECTING].includes(desktop.readyState)) desktop.close(code, reason); } catch {}
+     }
+ 
++    let footprintRequests = [];
+     phone.on("message", (data, isBinary) => {
++      if (!isBinary && data.length < 1024) {
++        let request;
++        try { request = JSON.parse(String(data)); } catch {}
++        if (request && request.type === "footprints_query") {
++          const now = Date.now();
++          footprintRequests = footprintRequests.filter((at) => now - at < 10_000);
++          if (footprintRequests.length >= 8 || !["today", "week", "month", "year"].includes(request.period)) return;
++          footprintRequests.push(now);
++          try {
++            const response = JSON.stringify(readFootprints(request.period));
++            if (Buffer.byteLength(response) <= 2 * 1024 * 1024) phone.send(response);
++          } catch { console.warn("[mobile-gateway] footprints read unavailable"); }
++          return;
++        }
++      }
+       if (desktop.readyState === WebSocket.OPEN) {
+         try { desktop.send(data, { binary: isBinary }); } catch { closeBoth(1011, "desktop send failed"); }
+       } else if (queue.length < MAX_QUEUE) queue.push({ data, isBinary });

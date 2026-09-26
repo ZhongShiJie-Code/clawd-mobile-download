@@ -22,7 +22,7 @@ import com.clawd.mobile.ui.theme.*
 internal fun BottomNav(selectedTab: Int, onTabSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
     val tabs = listOf(
         Triple(ClawdIcons.LayoutList, stringResource(R.string.sessions_tab_sessions), 0),
-        Triple(ClawdIcons.DeviceDesktop, stringResource(R.string.sessions_tab_devices), 1),
+        Triple(ClawdIcons.History, "足迹", 1),
         Triple(ClawdIcons.Settings, stringResource(R.string.sessions_tab_settings), 2)
     )
 

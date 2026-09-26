@@ -15,6 +15,7 @@ data class UsageSnapshot(
 data class UsageSnapshotData(
     val codex: CodexUsage = CodexUsage(),
     val deepseek: DeepSeekUsage = DeepSeekUsage(),
+    val antigravity: CodexUsage = CodexUsage(),
 )
 
 @Serializable
@@ -52,7 +53,7 @@ data class DeepSeekBalanceEntry(
 )
 
 fun UsageSnapshot.hasDisplayableUsage(): Boolean =
-    usage.codex.status == "ok" || usage.deepseek.status == "ok"
+    usage.codex.status == "ok" || usage.deepseek.status == "ok" || usage.antigravity.status == "ok"
 
 private const val USAGE_STALE_AFTER_MS = 30 * 60 * 1000L
 

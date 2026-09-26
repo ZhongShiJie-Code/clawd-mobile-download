@@ -7,6 +7,7 @@
 - [全部安装包与版本说明](https://github.com/ZhongShiJie-Code/clawd-mobile-download/releases)
 - v0.11.7 是连接诊断与额度新鲜度测试版，尚未完成真实手机安装验收。
 - v0.11.8 是保守省电候选版，发布状态以 Release 页面为准，尚未做真机耗电验收。
+- [v0.11.9](https://github.com/ZhongShiJie-Code/clawd-mobile-download/releases/tag/v0.11.9) 补齐 AGY 额度和电脑足迹数据，真机界面与安装待验收。
 - 正式测试安装包沿用 v0.11.6 的签名证书，可覆盖同签名的旧版本；不要拿 Actions 的 CI APK 覆盖安装。
 
 ## v0.11.7 改动
@@ -20,6 +21,8 @@
 
 ## 源码与构建
 
+v0.11.9 见 [额度与足迹说明](docs/releases/v0.11.9.md)：底部设备改为足迹，显示会话活动、小时柱图、按天热力图及当前账户额度；连接诊断仍保留。复用电脑统计，手机不重复查询服务商，足迹仅在页面可见时按需获取。其他部署需更新 [网关适配器](gateway/README.md)。
+
 v0.11.8 的范围和验收限制见 [省电测试版说明](docs/releases/v0.11.8.md)：熄屏停止悬浮渲染、稳定闲置 SVG 动画 20 帧采样、无网络暂停重试、工具输出合并刷新。工作/完成/授权事件即时处理，手机额度继续使用推送；唤醒锁与心跳不变。
 
 Android 工程位于 `android/`。需要 JDK 17、Android SDK、Node.js 和 Git。
@@ -31,7 +34,7 @@ node scripts/package-release.mjs
 
 发布前先提交精确源码，再构建。打包脚本拒绝脏工作目录、错误版本、错误提交和不兼容签名。输出在 `release-artifacts/`，包括 APK、`SHA256SUMS` 和 `release-manifest.json`，这些产物不进入源码提交。
 
-GitHub Actions 自动跑动画策略断言、Lint、82 项定向回归测试和 Debug 构建。CI Debug 签名是临时的，只用于验收；不自动发布，也不包含本地签名密钥。
+GitHub Actions 自动跑动画策略断言、6 项网关测试、Lint、88 项定向回归测试和 Debug 构建。CI Debug 签名是临时的，只用于验收；不自动发布，也不包含本地签名密钥。
 
 ## 验收限制
 

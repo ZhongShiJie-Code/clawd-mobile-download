@@ -86,6 +86,27 @@ class MessageHandlerTest {
 
     // ── Helpers ────────────────────────────────────────────────────────
 
+    @Test
+    fun `footprint snapshots cache periods separately without changing sessions`() {
+        val cache = MutableStateFlow<Map<String, com.clawd.mobile.data.FootprintsSnapshot>>(emptyMap())
+        val footprintHandler = MessageHandler(
+            tag = "Test", sessionsMap = sessionsMap, emitSessions = emitSessions,
+            displayState = displayState, syncing = syncing, footprints = cache,
+            permissionRequests = permissionRequests, reactions = reactions, scope = scope,
+            messageParser = messageParser, sendPong = sendPong,
+        )
+        for (period in listOf("today", "week", "today")) {
+            every { messageParser.parse(period) } returns ParsedMessage.Footprints(
+                com.clawd.mobile.data.FootprintsSnapshot(period = period, timestamp = if (period == "today") 2 else 1), 2,
+            )
+            assertTrue(footprintHandler.handleMessage(period, false))
+        }
+        assertEquals(setOf("today", "week"), cache.value.keys)
+        assertEquals(2L, cache.value["today"]?.timestamp)
+        verify(exactly = 0) { emitSessions() }
+        assertFalse(syncing.value)
+    }
+
     private fun makeSession(
         sessionId: String = "s1",
         state: String = "idle",
