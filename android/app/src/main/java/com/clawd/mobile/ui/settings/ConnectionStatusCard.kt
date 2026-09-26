@@ -52,7 +52,8 @@ internal fun ConnectionStatusCard(
             .padding(horizontal = 14.dp, vertical = 4.dp),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.surfaceVariant.copy(alpha = 0.72f)
+            containerColor = colors.surfaceVariant.copy(alpha = 0.72f),
+            contentColor = colors.onSurface,
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

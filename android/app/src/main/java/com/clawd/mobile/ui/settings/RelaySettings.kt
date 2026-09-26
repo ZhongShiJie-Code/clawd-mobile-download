@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import com.clawd.mobile.R
 import com.clawd.mobile.data.PrefsStore
 import com.clawd.mobile.ws.StreamingClient
+import com.clawd.mobile.ui.components.connectionFieldColors
 
 /**
  * Relay 设置区域 — AccordionSection 内容。
@@ -46,7 +47,8 @@ fun RelaySettings(
             placeholder = { Text("wss://your-vps-ip:7891") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            enabled = !useRelay
+            enabled = !useRelay,
+            colors = connectionFieldColors(),
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -58,7 +60,8 @@ fun RelaySettings(
             placeholder = { Text(stringResource(R.string.relay_token_placeholder)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            enabled = !useRelay
+            enabled = !useRelay,
+            colors = connectionFieldColors(),
         )
 
         Spacer(modifier = Modifier.height(12.dp))

@@ -8,6 +8,7 @@
 - v0.11.7 是连接诊断与额度新鲜度测试版，尚未完成真实手机安装验收。
 - v0.11.8 是保守省电候选版，发布状态以 Release 页面为准，尚未做真机耗电验收。
 - [v0.11.9](https://github.com/ZhongShiJie-Code/clawd-mobile-download/releases/tag/v0.11.9) 补齐 AGY 额度和电脑足迹数据，真机界面与安装待验收。
+- [v0.11.10](https://github.com/ZhongShiJie-Code/clawd-mobile-download/releases/tag/v0.11.10) 修复足迹白字和连接输入框浅色模式对比度。
 - 正式测试安装包沿用 v0.11.6 的签名证书，可覆盖同签名的旧版本；不要拿 Actions 的 CI APK 覆盖安装。
 
 ## v0.11.7 改动

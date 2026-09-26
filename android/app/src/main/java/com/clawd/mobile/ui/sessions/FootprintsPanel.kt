@@ -142,7 +142,11 @@ internal fun FootprintsPanel(
 
 @Composable
 private fun FootprintCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
     }
 }

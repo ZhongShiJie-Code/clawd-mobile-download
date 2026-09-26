@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.clawd.mobile.R
 import com.clawd.mobile.data.ConnectionConfig
 import com.clawd.mobile.data.PrefsStore
+import com.clawd.mobile.ui.components.connectionFieldColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +58,7 @@ fun ManualScreen(
                 label = { Text(stringResource(R.string.manual_host_label)) },
                 placeholder = { Text("192.168.1.10") },
                 singleLine = true,
+                colors = connectionFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -67,6 +69,7 @@ fun ManualScreen(
                 placeholder = { Text("23334") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = connectionFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -76,6 +79,7 @@ fun ManualScreen(
                 label = { Text(stringResource(R.string.manual_token_label)) },
                 placeholder = { Text(stringResource(R.string.manual_token_placeholder)) },
                 singleLine = true,
+                colors = connectionFieldColors(),
                 visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     IconButton(onClick = { tokenVisible = !tokenVisible }) {

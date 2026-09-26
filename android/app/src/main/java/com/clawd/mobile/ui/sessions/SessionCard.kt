@@ -76,7 +76,8 @@ internal fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Mod
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.surfaceVariant.copy(alpha = 0.72f)
+            containerColor = colors.surfaceVariant.copy(alpha = 0.72f),
+            contentColor = colors.onSurface,
         )
     ) {
         Column(modifier = Modifier.padding(14.dp, 12.dp, 14.dp, 10.dp)) {
